@@ -1,4 +1,4 @@
-  ---
+---
 title: "90904 Final Project"
 author: "Prithvi Acharya"
 date: "April 27, 2018"
@@ -26,7 +26,7 @@ setwd("C:/Users/prith/OneDrive/Documents/EPP/Courses/Spring 2018/90904/proj/")
 
 ```
 
-```{r split-files}
+```{r split-files, eval = F}
 
 #read in raw data to a dataframe
 data <- read_csv("EMS_Incident_Dispatch_Data.csv",
@@ -99,7 +99,7 @@ rm(test.20,tune.30)
 ```
 
 ## Descriptive Statistics
-```{r transfrm}
+```{r transfrm, eval = F}
 
 # Looking at the Y-Variable
 par(mfrow = c(1,2))
@@ -275,7 +275,81 @@ yhat.nn <- yhat.nn$net.result
 y.nn <- tune.30.nn$INCIDENT_RESPONSE_SECONDS_QY
 
 rmse.nn <- rmse(y.nn,yhat.nn)
+```
 
+```{r final-pred}
+#new training set combines train and tune sets
+train.80 <- rbind(train.50,tune.30)
+
+#loading and cleaning test set.
+test.20 <- read_csv("test_20.csv")
+d <- hour(test.20$INCIDENT_DATETIME) +
+  (minute(test.20$INCIDENT_DATETIME)/60) + 
+  (second(test.20$INCIDENT_DATETIME)/3600)
+
+#Converting Variables as discussed in Section 3.3 - Feature Choices
+test.20$TIME_OF_DAY <- cos(d/366)
+test.20$MONTH <- cos(month(test.20$INCIDENT_DATETIME)/12)
+test.20$ZIPCODE <- as.factor(test.20$ZIPCODE)
+
+test.20 <- filter(test.20,is.na(log(test.20$INCIDENT_TRAVEL_TM_SECONDS_QY))== FALSE)
+xnam <- colnames(test.20[,c(4,20,23,33:48)])
+n <- rowSums(is.na(test.20[,xnam]))
+test.20 <- filter(test.20,
+                  test.20$INCIDENT_RESPONSE_SECONDS_QY > 0 &
+                    n == 0 &
+                    test.20$INCIDENT_TRAVEL_TM_SECONDS_QY > 0)
+
+y <- log(test.20$INCIDENT_RESPONSE_SECONDS_QY)
+
+#rebuilding the three models
+finalmodel1 <- lm(fml.a, data = train.80)
+yhat1 <- predict(finalmodel1, newdata = test.20)
+rm(finalmodel1)
+
+finalmodel2 <- lm(fml.wo, data = train.80)
+yhat2 <- predict(finalmodel2, newdata = test.20)
+rm(finalmodel2)
+
+finalmodel4 <- randomForest(fml.rf1,
+                            data = train.80,
+                            ntree = 50)
+yhat4 <- predict(finalmodel4, newdata = test.20)
+
+
+#calculating and plotting RMSE/model performance
+rmsefinal <-c(rmse(y,yhat1),rmse(y,yhat2),rmse(y,yhat4))
+rmsefinal <- cbind(c("Model 1","Model 2","Model 3"),rmsefinal)
+
+png('preds.png')
+par(mfrow = c(1,3))
+plot(y,yhat1,
+     xlab="Actual Value - log(Response Time)",
+     ylab = "Predicted Value",
+     xlim = c(2,max(c(y,yhat1))),
+     main = "Model 1",
+     ylim = c(2,max(c(y,yhat1))))
+abline(0,1,col = "blue",lwd = 2)
+
+plot(y,yhat2,
+     xlab="Actual Value - log(Response Time)",
+     ylab = "Predicted Value",
+     xlim = c(2,max(c(y,yhat2))),
+     main = "Model 2",
+     ylim = c(2,max(c(y,yhat2))))
+abline(0,1,col = "blue",lwd = 2)
+
+plot(y,yhat4,
+     xlab="Actual Value - log(Response Time)",
+     ylab = "Predicted Value",
+     xlim = c(2,max(c(y,yhat2))),
+     main = "Model 4",
+     ylim = c(2,max(c(y,yhat2))))
+abline(0,1,col = "blue",lwd = 2)
+dev.off()
+
+xtable(rmsefinal, digits = 4, 
+       caption = "rMSE of Prediction on Final 20%")
 
 ```
 
